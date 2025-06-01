@@ -2,7 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <meta name="viewport"
+      content="width=device-width, initial-scale=1.0,
+               maximum-scale=1.0, user-scalable=no">
   <title>Aidan & Dune’s Adventure</title>
   <!-- p5 core -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
@@ -11,9 +13,26 @@
   <!-- game code -->
   <script defer src="main.js"></script>
   <style>
-    body { margin:0; background:#000; }
-    canvas { display:block; }
-  </style>
+  body   {
+    margin: 0;
+    background: #000;
+    touch-action: manipulation;        /* blocks double‑tap zoom             */
+    -webkit-tap-highlight-color: transparent; /* ← NEW: kill blue flash      */
+    -webkit-touch-callout: none;       /* ← NEW: no‑hold callout menu        */
+    user-select: none;                 /* optional: no accidental text drag  */
+  }
+
+  canvas {
+    display: block;
+    outline: none;                     /* no focus ring when programmatic    */
+    -webkit-tap-highlight-color: transparent; /* same for canvas itself      */
+  }
+
+  #touch-pad button {
+    touch-action: manipulation;        /* keep zoom disabled on the buttons  */
+    -webkit-tap-highlight-color: transparent; /* no flash on button taps     */
+  }
+</style>
 </head>
 <body></body>
 </html>

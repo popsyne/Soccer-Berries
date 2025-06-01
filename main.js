@@ -15,9 +15,10 @@ const GRAVITY         = 1.1;
 const MOVE_SPEED      = 4;
 const JUMP_STRENGTH   = 20;       // 20 % stronger
 const TERMINAL_VEL    = 25;
-const logoScale       = 0.25;
+const logoScale       = 0.125;
 const SPRITE_SCALE    = 1.5;      // draw 150 % size
-
+const MAX_BALLS         = 50;   // hard ceiling; tweak to taste
+const BOUNCE_COOLDOWN   = 3000;  // ms between bounce sounds per ball
 /* ─── Mobile helpers ─── */
 const IS_TOUCH = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 const touchKeys = { left:false, right:false, jump:false, kick:false };
@@ -44,7 +45,7 @@ function preload() {
   mapImg        = loadImage('assets/map1.png');
 
   // sounds (guarded)
-  music         = loadSound('assets/audioLoop.wav');
+  music         = loadSound('assets/startaudio.wav');
   sfx.jump      = loadSound('assets/jump.wav');
   sfx.coin      = loadSound('assets/coin.wav');
   sfx.bonk      = loadSound('assets/collide.wav');
@@ -150,7 +151,9 @@ class Ball {
     this.vel  = p5.Vector.fromAngle(ang).setMag(8);
     this.r    = tileSize * 0.4;
     this.spin = random(-0.2, 0.2);                 // rad / frame
-    this.a    = 0;                                 // current angle
+    this.a    = 0;   
+    this.birth = millis();                              // current angle
+    this.lastSound = 0;
   }
 
   update() {
@@ -163,7 +166,10 @@ class Ball {
     /* --- horizontal wall test -------------------- */
     if (next.x - this.r < 0 || next.x + this.r > mapW * tileSize) {
       this.vel.x *= -1;
+    if (millis() - this.lastSound > BOUNCE_COOLDOWN) {
+      this.lastSound = millis();
       sfx.bounce?.play();
+  }
     }
 
     /* --- vertical / platform test ---------------- */
@@ -173,7 +179,10 @@ class Ball {
 
     if (tiles[ty]?.[tx] === 'platform') {
       this.vel.y *= -0.85;                         // elastic
+      if (millis() - this.lastSound > BOUNCE_COOLDOWN) {
+      this.lastSound = millis();
       sfx.bounce?.play();
+  }
     }
 
     /* apply */
@@ -240,10 +249,12 @@ class Player {
     /* 4. Kick / launch ball ----------------------------------------- */
     if (wantKick) {
       touchKeys.kick = false;                       // edge‑triggered
+    if (this.scene.balls.length < MAX_BALLS) {
       const bx = this.pos.x + this.w / 2;
       const by = this.pos.y + this.h / 2;
       this.scene.balls.push(new Ball(bx, by, !this.flip));
-      if (sfx.kick) { sfx.kick.play(); }
+    if (sfx.kick) { sfx.kick.play(); }
+  }
     }
 
     /* 5. Physics ----------------------------------------------------- */
@@ -440,7 +451,11 @@ class Play {
             const impulse = rel * 0.9;
             a.vel.sub(p5.Vector.mult(n, impulse));
             b.vel.add(p5.Vector.mult(n, impulse));
+            const now = millis();
+          if (now - a.lastSound > BOUNCE_COOLDOWN) {
+            a.lastSound = b.lastSound = now;   // sync both balls’ timers
             sfx.bounce?.play();
+}
           }
         }
       }
@@ -466,6 +481,7 @@ class Play {
 
     /* balls, coins, flag, player */
     this.balls.forEach(b => b.draw());
+    this.balls = this.balls.filter(b => millis() - b.birth < 20000); // 20‑s lifetime
     this.coins.forEach(c => !c.col &&
       image(img.coin, c.x, c.y, tileSize, tileSize));
     image(img.flag, flagPos.x * tileSize, flagPos.y * tileSize - tileSize,
@@ -489,10 +505,12 @@ class Play {
   keyPressed(k) {
     if (k === 82) this.sm.change('start');              // R = restart
     if (k === 88) {                                     // X = kick
+        if (this.balls.length < MAX_BALLS) {
       const bx = this.p.pos.x + this.p.w / 2;
       const by = this.p.pos.y + this.p.h / 2;
       this.balls.push(new Ball(bx, by, !this.p.flip));
       sfx.kick?.play();
+    }
     }
   }
 }
@@ -569,10 +587,9 @@ function makeTouchUI(sm) {
     b.touchEnded  (() => { keyObj[prop] = false; });
     return b;
   };
-
-  mkBtn('⬅︎', touchKeys, 'left');
-  mkBtn('➡︎', touchKeys, 'right');
-  mkBtn('⤒',  touchKeys, 'jump');      // jump
-  mkBtn('⚽️', touchKeys, 'kick');      // kick / launch ball
   mkBtn('↻',  {}, '').mousePressed(() => { sm.change('start'); });
+  mkBtn('⚽️', touchKeys, 'kick');
+  mkBtn('⤒',  touchKeys, 'jump');     // jump (leg)
+  mkBtn('<', touchKeys, 'left');
+  mkBtn('>', touchKeys, 'right');
 }
