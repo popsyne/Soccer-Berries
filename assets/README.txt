@@ -1,0 +1,1 @@
+Place all image (.png) and sound (.wav) assets here with the exact filenames listed in main.js preload().
