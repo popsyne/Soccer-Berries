@@ -5,25 +5,31 @@
       • 20 % stronger jump
       • walk animation plays even when pushing a wall
       • DVD logos spawn safely, bounce with sound
-      • X‑key launches gravity‑bouncing balls (ball.png) with kick.wav / bounce.wav
+      • X‑key (or ⚽️ button) launches gravity‑bouncing balls (ball.png)
+      • Touch overlay & tap‑to‑start for mobile
 */
 
+/* ─── Global constants ─── */
 const GAME_TIME_LIMIT = 60_000;
 const GRAVITY         = 1.1;
 const MOVE_SPEED      = 4;
 const JUMP_STRENGTH   = 20;       // 20 % stronger
 const TERMINAL_VEL    = 25;
 const logoScale       = 0.25;
-const SPRITE_SCALE = 1.5;    // draw 150 % size
+const SPRITE_SCALE    = 1.5;      // draw 150 % size
 
+/* ─── Mobile helpers ─── */
+const IS_TOUCH = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+const touchKeys = { left:false, right:false, jump:false, kick:false };
 
+/* ─── Assets & globals ─── */
 let img  = {}, sfx = {}, music;
 let mapImg, tileSize, mapW, mapH;
 let tiles = [], coins = [], flagPos = null, playerStart;
 let totalCoins = 0;
 let sceneManager;
 
-/* ───────────────── preload ───────────────── */
+/* ══════════ preload ══════════ */
 function preload() {
   [
     // UI & sprites
@@ -46,10 +52,12 @@ function preload() {
   sfx.bounce    = loadSound('assets/bounce.wav');
 }
 
-/* ───────────────── setup ───────────────── */
+/* ══════════ setup ══════════ */
 function setup() {
   createCanvas(windowWidth, windowHeight);
-  pixelDensity(1); noSmooth(); textAlign(CENTER, CENTER);
+  pixelDensity(window.devicePixelRatio || 1);  // crisp on Retina
+  noSmooth();
+  textAlign(CENTER, CENTER);
 
   parseMap();
 
@@ -137,12 +145,12 @@ class Sprite {
 /* ══════════ Ball ══════════ */
 class Ball {
   constructor(x, y, dirRight) {
-    this.pos = createVector(x, y);
-    const ang = dirRight ? -PI/4 : -3*PI/4;     // 45°
-    this.vel = p5.Vector.fromAngle(ang).setMag(8);
-    this.r   = tileSize * 0.4;
-    this.spin = random(-0.2, 0.2);              // rad / frame
-    this.a    = 0;                              // current angle
+    this.pos  = createVector(x, y);
+    const ang = dirRight ? -PI / 4 : -3 * PI / 4;  // 45°
+    this.vel  = p5.Vector.fromAngle(ang).setMag(8);
+    this.r    = tileSize * 0.4;
+    this.spin = random(-0.2, 0.2);                 // rad / frame
+    this.a    = 0;                                 // current angle
   }
 
   update() {
@@ -164,7 +172,7 @@ class Ball {
     const ty = floor(vy / tileSize);
 
     if (tiles[ty]?.[tx] === 'platform') {
-      this.vel.y *= -0.85;                               // elastic
+      this.vel.y *= -0.85;                         // elastic
       sfx.bounce?.play();
     }
 
@@ -177,7 +185,7 @@ class Ball {
     push();
       translate(this.pos.x, this.pos.y);
       rotate(this.a);
-      image(img.ball, -this.r, -this.r, this.r*2, this.r*2);
+      image(img.ball, -this.r, -this.r, this.r * 2, this.r * 2);
     pop();
   }
 }
@@ -198,22 +206,47 @@ class Player {
     this.jump = new Sprite(sheets.jump, 1, this.w / 64);
   }
 
+  /* ── Patched update(): desktop + touch ── */
   update() {
-    /* input */
+    /* 1. Input: physical keys OR on‑screen --------------------------- */
     let dir = 0;
-    if (keyIsDown(65) || keyIsDown(LEFT_ARROW))  dir = -1;
-    if (keyIsDown(68) || keyIsDown(RIGHT_ARROW)) dir =  1;
-    this.walkIntent = dir !== 0;
-    this.vel.x = lerp(this.vel.x, dir * MOVE_SPEED, 0.2);
-    if (dir) this.flip = dir < 0;
-
-    if ((keyIsDown(32) || keyIsDown(UP_ARROW)) && this.g) {
-      this.vel.y = -JUMP_STRENGTH;
-      this.g = false;
-      sfx.jump?.play();
+    if (keyIsDown(65) || keyIsDown(LEFT_ARROW) || touchKeys.left) {
+      dir = -1;
+    }
+    if (keyIsDown(68) || keyIsDown(RIGHT_ARROW) || touchKeys.right) {
+      dir = 1;
     }
 
-    /* physics */
+    const wantJump = keyIsDown(32) ||
+                     keyIsDown(UP_ARROW) ||
+                     touchKeys.jump;
+
+    const wantKick = keyIsDown(88) || touchKeys.kick;
+
+    /* 2. Horizontal motion ------------------------------------------ */
+    this.walkIntent = dir !== 0;
+    this.vel.x = lerp(this.vel.x, dir * MOVE_SPEED, 0.2);
+    if (dir !== 0) {
+      this.flip = dir < 0;
+    }
+
+    /* 3. Jump -------------------------------------------------------- */
+    if (wantJump && this.g) {
+      this.vel.y = -JUMP_STRENGTH;
+      this.g = false;
+      if (sfx.jump) { sfx.jump.play(); }
+    }
+
+    /* 4. Kick / launch ball ----------------------------------------- */
+    if (wantKick) {
+      touchKeys.kick = false;                       // edge‑triggered
+      const bx = this.pos.x + this.w / 2;
+      const by = this.pos.y + this.h / 2;
+      this.scene.balls.push(new Ball(bx, by, !this.flip));
+      if (sfx.kick) { sfx.kick.play(); }
+    }
+
+    /* 5. Physics ----------------------------------------------------- */
     this.vel.y += GRAVITY;
     this.vel.y = constrain(this.vel.y, -TERMINAL_VEL, TERMINAL_VEL);
 
@@ -244,7 +277,7 @@ class Player {
   }
 
   resolveY() {
-    if (this.vel.y > 0) {                     // falling
+    if (this.vel.y > 0) {                      // falling
       const yTile = floor((this.pos.y + this.h) / tileSize);
       const left  = floor(this.pos.x / tileSize);
       const right = floor((this.pos.x + this.w - 1) / tileSize);
@@ -257,7 +290,7 @@ class Player {
           break;
         }
       }
-    } else if (this.vel.y < 0) {              // rising
+    } else if (this.vel.y < 0) {               // rising
       const yTile = floor(this.pos.y / tileSize);
       const left  = floor(this.pos.x / tileSize);
       const right = floor((this.pos.x + this.w - 1) / tileSize);
@@ -282,8 +315,9 @@ class Player {
 /* ══════════ Scenes ══════════ */
 class Start {
   constructor(sm) { this.sm = sm; }
-  enter()     { this.logos = [new Logo(img.aidanLogo), new Logo(img.duneLogo)]; }
-  update()    { this.logos.forEach(l => l.update()); if (this.logos[0].collides(this.logos[1])) this.logos[0].bounce(this.logos[1]); }
+  enter()  { this.logos = [new Logo(img.aidanLogo), new Logo(img.duneLogo)]; }
+  update() { this.logos.forEach(l => l.update());
+             if (this.logos[0].collides(this.logos[1])) this.logos[0].bounce(this.logos[1]); }
   draw() {
     background(0);
     image(img.startupBackground, 0, 0, width, height);
@@ -293,7 +327,10 @@ class Start {
     noStroke();
     this.logos.forEach(l => l.draw());
   }
-  keyPressed() { getAudioContext().resume(); if (music && !music.isPlaying()) music.play(); this.sm.change('select'); }
+  keyPressed()  { getAudioContext().resume();
+                  if (music && !music.isPlaying()) music.play();
+                  this.sm.change('select'); }
+  mousePressed() { this.keyPressed(); }          // tap = any key
 }
 
 class Select {
@@ -327,38 +364,50 @@ class Play {
   constructor(sm) { this.sm = sm; }
   enter(data) {
     this.char = data?.char || 'dune';
-    const sheets = { idle: img[this.char + '_idle'], walk: img[this.char + '_walk'], jump: img[this.char + '_jump'] };
+    const sheets = {
+      idle: img[this.char + '_idle'],
+      walk: img[this.char + '_walk'],
+      jump: img[this.char + '_jump']
+    };
     this.p = new Player(playerStart.x * tileSize, playerStart.y * tileSize, sheets);
+    this.p.scene = this;                       // let player spawn balls
+
+    if (IS_TOUCH) makeTouchUI(this.sm);        // one‑time overlay
 
     this.cam   = 0;
     this.t0    = millis();
-    this.coins = coins.map(c => ({ ...c, col: false }));
+    this.coins = coins.map(c => ({ ...c, col:false }));
     this.balls = [];
   }
 
   update() {
     const timeLeft = GAME_TIME_LIMIT - (millis() - this.t0);
-    if (timeLeft <= 0) { this.sm.change('over', { c: this.collected() }); return; }
+    if (timeLeft <= 0) {
+      this.sm.change('over', { c: this.collected() });
+      return;
+    }
 
     this.p.update();
     this.cam = constrain(this.p.pos.x + this.p.w / 2 - width / 2, 0, mapW * tileSize - width);
 
-    
-
-    // coin collect
+    /* coin collect */
     for (const c of this.coins) {
       if (!c.col && dist(this.p.pos.x, this.p.pos.y, c.x, c.y) < tileSize * 0.8) {
-        c.col = true; sfx.coin?.play();
+        c.col = true;
+        sfx.coin?.play();
       }
     }
 
-    // balls
+    /* balls */
     for (const b of this.balls) b.update();
     this.handleBallCollisions();
 
-    // lose / win
-    if (this.p.pos.y > mapH * tileSize || this.touchLava()) this.sm.change('over', { c: this.collected() });
-    if (dist(this.p.pos.x, this.p.pos.y, flagPos.x * tileSize, flagPos.y * tileSize) < tileSize)
+    /* lose / win */
+    if (this.p.pos.y > mapH * tileSize || this.touchLava())
+      this.sm.change('over', { c: this.collected() });
+
+    if (dist(this.p.pos.x, this.p.pos.y,
+             flagPos.x * tileSize, flagPos.y * tileSize) < tileSize)
       this.sm.change('win', { c: this.collected() });
   }
 
@@ -368,9 +417,11 @@ class Play {
     const r = floor((this.p.pos.x + this.p.w) / tileSize);
     const t = floor(this.p.pos.y / tileSize);
     const b = floor((this.p.pos.y + this.p.h) / tileSize);
-    for (let y = t; y <= b; y++)
-      for (let x = l; x <= r; x++)
+    for (let y = t; y <= b; y++) {
+      for (let x = l; x <= r; x++) {
         if (tiles[y]?.[x] === 'lava') return true;
+      }
+    }
     return false;
   }
 
@@ -402,25 +453,31 @@ class Play {
 
     push(); translate(-this.cam, 0);
 
-    // tiles
+    /* tiles */
     for (let y = 0; y < mapH; y++) {
       for (let x = 0; x < mapW; x++) {
         const t = tiles[y][x];
-        if (t === 'platform') image(img.platform, x * tileSize, y * tileSize, tileSize, tileSize);
-        else if (t === 'lava') image(img.lava, x * tileSize, y * tileSize, tileSize, tileSize);
+        if (t === 'platform')
+          image(img.platform, x * tileSize, y * tileSize, tileSize, tileSize);
+        else if (t === 'lava')
+          image(img.lava, x * tileSize, y * tileSize, tileSize, tileSize);
       }
     }
 
-    // balls, coins, flag, player
+    /* balls, coins, flag, player */
     this.balls.forEach(b => b.draw());
-    this.coins.forEach(c => !c.col && image(img.coin, c.x, c.y, tileSize, tileSize));
-    image(img.flag, flagPos.x * tileSize, flagPos.y * tileSize - tileSize, tileSize, tileSize * 1.5);
+    this.coins.forEach(c => !c.col &&
+      image(img.coin, c.x, c.y, tileSize, tileSize));
+    image(img.flag, flagPos.x * tileSize, flagPos.y * tileSize - tileSize,
+          tileSize, tileSize * 1.5);
     this.p.draw();
 
     pop();
 
-    // HUD
-    image(img[this.char + 'Logo'], 10, 10, img[this.char + 'Logo'].width * logoScale, img[this.char + 'Logo'].height * logoScale);
+    /* HUD */
+    image(img[this.char + 'Logo'], 10, 10,
+          img[this.char + 'Logo'].width * logoScale,
+          img[this.char + 'Logo'].height * logoScale);
     fill(255); textSize(24);
     text(`Coins: ${this.collected()}/${totalCoins}`, width - 120, 30);
     text(ceil((GAME_TIME_LIMIT - (millis() - this.t0)) / 1000), width / 2, 30);
@@ -430,8 +487,8 @@ class Play {
 
   /* --- input --- */
   keyPressed(k) {
-    if (k === 82) this.sm.change('start');          // R = restart
-    if (k === 88) {                                 // X = kick ball
+    if (k === 82) this.sm.change('start');              // R = restart
+    if (k === 88) {                                     // X = kick
       const bx = this.p.pos.x + this.p.w / 2;
       const by = this.p.pos.y + this.p.h / 2;
       this.balls.push(new Ball(bx, by, !this.p.flip));
@@ -445,8 +502,10 @@ class Over {
   enter(d) { this.c = d.c; music?.pause(); }
   draw() {
     background(0);
-    fill(255, 0, 0); textSize(48); text("GAME OVER", width / 2, height * 0.4);
-    fill(255); textSize(24); text(`Coins: ${this.c}/${totalCoins}`, width / 2, height * 0.5);
+    fill(255, 0, 0); textSize(48);
+    text("GAME OVER", width / 2, height * 0.4);
+    fill(255); textSize(24);
+    text(`Coins: ${this.c}/${totalCoins}`, width / 2, height * 0.5);
     text("Press R to retry", width / 2, height * 0.56);
   }
   keyPressed(k) { if (k === 82) this.sm.change('start'); }
@@ -477,9 +536,11 @@ function parseMap() {
   for (let y = 0; y < mapH; y++) {
     for (let x = 0; x < mapW; x++) {
       const idx = (y * mapW + x) * 4;
-      const hex = (mapImg.pixels[idx] << 16) | (mapImg.pixels[idx + 1] << 8) | mapImg.pixels[idx + 2];
+      const hex = (mapImg.pixels[idx] << 16) |
+                  (mapImg.pixels[idx + 1] << 8) |
+                  mapImg.pixels[idx + 2];
 
-      if (hex === 0x000000) tiles[y][x] = 'platform';
+      if      (hex === 0x000000) tiles[y][x] = 'platform';
       else if (hex === 0xFF00FF) tiles[y][x] = 'lava';
       else if (hex === 0xFF0000) playerStart = createVector(x, y);
       else if (hex === 0x11FF00) coins.push({ x: x * tileSize, y: y * tileSize });
@@ -487,4 +548,31 @@ function parseMap() {
     }
   }
   totalCoins = coins.length;
+}
+
+/* ══════════ Minimal touch overlay ══════════ */
+function makeTouchUI(sm) {
+  // build once
+  if (document.getElementById('touch‑pad')) return;
+
+  const pad = createDiv('').id('touch‑pad').style(`
+        position:fixed; left:0; right:0; bottom:0;
+        display:flex; justify-content:space-between;
+        padding:12px; gap:12px; pointer-events:none;`);
+
+  const mkBtn = (label, keyObj, prop) => {
+    const b = createButton(label).parent(pad).style(`
+          font-size:28px; padding:12px 18px; border-radius:12px;
+          background:rgba(255,255,255,.35); backdrop-filter:blur(4px);
+          pointer-events:auto; border:none;`);
+    b.touchStarted(() => { keyObj[prop] = true; });
+    b.touchEnded  (() => { keyObj[prop] = false; });
+    return b;
+  };
+
+  mkBtn('⬅︎', touchKeys, 'left');
+  mkBtn('➡︎', touchKeys, 'right');
+  mkBtn('⤒',  touchKeys, 'jump');      // jump
+  mkBtn('⚽️', touchKeys, 'kick');      // kick / launch ball
+  mkBtn('↻',  {}, '').mousePressed(() => { sm.change('start'); });
 }
