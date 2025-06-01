@@ -358,7 +358,9 @@ class Start {
   text("Berry Adventure", xOffset2 + width / 2, height * 0.18 + yOffset2);
 
   // "Press any key" flickers slightly
-  noStroke();
+  //noStroke();
+  strokeWeight(6);
+  stroke(100);
   fill(0);
   textSize(24);
   //if (frameCount % 60 < 45) {
@@ -368,6 +370,7 @@ class Start {
   // Game instructions — small and readable
   textSize(20);
   fill(0);
+  text("Turn off Silent mode for sound 🎧", width / 2, height * 0.38);
   text("Goal: Collect berries before the timer runs out", width / 2, height * 0.42);
   text("R = Restart Level", width / 2, height * 0.48);
   text("X = Launch Ball", width / 2, height * 0.52);
