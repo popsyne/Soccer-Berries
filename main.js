@@ -10,14 +10,14 @@
 */
 
 /* ─── Global constants ─── */
-const GAME_TIME_LIMIT = 60_000;
+const GAME_TIME_LIMIT = 120_000;
 const GRAVITY         = 1.1;
 const MOVE_SPEED      = 4;
 const JUMP_STRENGTH   = 20;       // 20 % stronger
 const TERMINAL_VEL    = 25;
 const logoScale       = 0.125;
 const SPRITE_SCALE    = 1.5;      // draw 150 % size
-const MAX_BALLS         = 50;   // hard ceiling; tweak to taste
+const MAX_BALLS         = 100;   // hard ceiling; tweak to taste
 const BOUNCE_COOLDOWN   = 3000;  // ms between bounce sounds per ball
 /* ─── Mobile helpers ─── */
 const IS_TOUCH = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
@@ -326,15 +326,56 @@ class Player {
 /* ══════════ Scenes ══════════ */
 class Start {
   constructor(sm) { this.sm = sm; }
-  enter()  { this.logos = [new Logo(img.aidanLogo), new Logo(img.duneLogo)]; }
+  enter()  { 
+    this.logos = [new Logo(img.aidanLogo), new Logo(img.duneLogo)];
+    image(img.startupBackground, 0, 0, width, height); 
+}
   update() { this.logos.forEach(l => l.update());
              if (this.logos[0].collides(this.logos[1])) this.logos[0].bounce(this.logos[1]); }
+             
+
+  
   draw() {
-    background(0);
-    image(img.startupBackground, 0, 0, width, height);
-    stroke(0); strokeWeight(6); fill('#ff66cc');
-    textSize(56); text("Aidan & Dune's Adventure", width / 2, height * 0.25);
-    textSize(24); text("Press any key", width / 2, height * 0.32);
+    //background(0);
+    
+      let hue = frameCount % 360;
+  colorMode(HSB);
+  let titleColor = color(hue, 100, 100);
+
+  textAlign(CENTER);
+  stroke(titleColor-5);
+  strokeWeight(1);
+  fill(titleColor);
+  textSize(56);
+
+  // Subtle vertical wave animation
+  let yOffset1 = sin(frameCount * 0.1) * 6;
+  let yOffset2 = cos(frameCount * 0.1) * -6;
+  let xOffset1 = sin(frameCount * 0.1) * 6;
+  let xOffset2 = cos(frameCount * 0.1) * -6;
+
+  text("Aidan & Dune's", xOffset1 + width / 2, height * 0.1 + yOffset1);
+  text("Berry Adventure", xOffset2 + width / 2, height * 0.18 + yOffset2);
+
+  // "Press any key" flickers slightly
+  noStroke();
+  fill(0);
+  textSize(24);
+  //if (frameCount % 60 < 45) {
+    //text("Press any key", width / 2, height * 0.32);
+  //  }
+
+  // Game instructions — small and readable
+  textSize(20);
+  fill(0);
+  text("Goal: Collect berries before the timer runs out", width / 2, height * 0.42);
+  text("R = Restart Level", width / 2, height * 0.48);
+  text("X = Launch Ball", width / 2, height * 0.52);
+  text("Arrow Keys = Move/Jump", width / 2, height * 0.56);
+
+  // Reset color mode if needed
+  colorMode(RGB);
+
     noStroke();
     this.logos.forEach(l => l.draw());
   }
