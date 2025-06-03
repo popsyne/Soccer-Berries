@@ -16,7 +16,7 @@
 
 /* ─── Global constants ─── */
 const GAME_TIME_LIMIT = 120000;
-const GRAVITY = 0.6;
+const GRAVITY = 0.8;
 const MOVE_SPEED = 4;
 const JUMP_STRENGTH = 20;
 const TERMINAL_VEL = 25;
