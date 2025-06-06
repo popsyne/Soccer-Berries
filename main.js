@@ -192,8 +192,7 @@ class Logo {
   constructor(img) {
     this.img = img;
     this.w = img.width * logoScale;
-    this.h = img.height * logoScale;
-    // random spawn away from edges
+ this.h = img.height * logoScale;
     const margin = 10;
     let ok = false;
     while (!ok) {
@@ -326,10 +325,11 @@ class Player {
     this.g = false;
     this.flip = false;
     this.walkIntent = false;
+    this.spriteScale = 1.3; // Increase this value to make sprites bigger
 
-    this.idle = new Sprite(sheets.idle, 2, this.w / 64);
-    this.walk = new Sprite(sheets.walk, 8, this.w / 64);
-    this.jump = new Sprite(sheets.jump, 1, this.w / 64);
+    this.idle = new Sprite(sheets.idle, 2, (this.w / 64) * this.spriteScale);
+    this.walk = new Sprite(sheets.walk, 8, (this.w / 64) * this.spriteScale); // Apply spriteScale to walk animation
+    this.jump = new Sprite(sheets.jump, 1, (this.w / 64) * this.spriteScale); // Apply spriteScale to jump animation
   }
   update() {
     let dir = 0;
@@ -414,9 +414,21 @@ class Player {
   }
 
   draw() {
-    if (!this.g)              this.jump.draw(this.pos.x, this.pos.y, this.flip, 0);
-    else if (this.walkIntent) this.walk.draw(this.pos.x, this.pos.y, this.flip, 0.3);
-    else                      this.idle.draw(this.pos.x, this.pos.y, this.flip, 0.1);
+    // Calculate sprite offset to keep the collision box in the same place
+    const spriteOffset = (this.w * (this.spriteScale - 1)) / 2;
+
+    if (!this.g) {
+ this.jump.draw(this.pos.x - spriteOffset, this.pos.y + 5 - spriteOffset, this.flip, 0);
+    } else if (this.walkIntent) {
+ this.walk.draw(this.pos.x - spriteOffset, this.pos.y + 5 - spriteOffset, this.flip, 0.3);
+    } else {
+ this.idle.draw(this.pos.x - spriteOffset, this.pos.y + 5 - spriteOffset, this.flip, 0.1);
+    }
+
+    // Optional: Draw the collision box for debugging
+    // noFill();
+    // stroke(255, 0, 0);
+    // rect(this.pos.x, this.pos.y, this.w, this.h);
   }
 }
 
@@ -489,17 +501,18 @@ class Select {
   }
   enter() {
     this.aBox = {
-      x: width * 0.25 - img.aidanLogo.width * logoScale / 2,
-      y: height * 0.45 - img.aidanLogo.height * logoScale / 2,
-      w: img.aidanLogo.width * logoScale,
-      h: img.aidanLogo.height * logoScale
+      w: img.aidanLogo.width * logoScale * 0.6, // Use smaller width
+      h: img.aidanLogo.height * logoScale * 0.6 // Use smaller height
     };
+    this.aBox.x = width * 0.25 - this.aBox.w / 2; // Center horizontally
+    this.aBox.y = height * 0.45 - this.aBox.h / 2; // Center vertically
+
     this.dBox = {
-      x: width * 0.75 - img.duneLogo.width * logoScale / 2,
-      y: this.aBox.y,
-      w: img.duneLogo.width * logoScale,
-      h: img.duneLogo.height * logoScale
+      w: this.aBox.w, // Same width as aidanLogo
+      h: this.aBox.h  // Same height as aidanLogo
     };
+    this.dBox.x = width * 0.75 - this.dBox.w / 2; // Center horizontally
+    this.dBox.y = this.aBox.y; // Align vertically with aidanLogo
     this.hover = null;
   }
   update() {
@@ -534,78 +547,72 @@ class LevelSelect {
   }
   enter(data) {
     this.char  = data.char;
-    this.level = data.level || 'MAP1';
-    const spec = MAPS[this.level];
 
-    parseMapFrom(spec.img);
-
-    const sheets = {
-      idle: img[this.char + '_idle'],
-      walk: img[this.char + '_walk'],
-      jump: img[this.char + '_jump']
-    };
-    this.p = new Player(playerStart.x * tileSize, playerStart.y * tileSize, sheets);
-    this.p.scene = this;
-
-    if (IS_TOUCH) makeTouchUI(this.sm);
-    this.cam = 0;
-    this.t0 = millis();
-    this.coins = coins.map(c => ({ ...c, col: false }));
-    this.balls = [];
-
-    // stop any playing level music
-    for (const lvlKey in MAPS) {
-      const old = MAPS[lvlKey].musicObj;
-      if (old && old.isPlaying?.()) old.stop();
-    }
-    this.music = spec.musicObj || null;
-    if (this.music) {
-      this.music.setLoop(true);
-      this.music.setVolume(0.6);
-      this.music.play();
-    }
-
-    this.tPlatform   = img[spec.tiles.platform];
-    this.tLava       = img[spec.tiles.lava];
-    this.tCoin       = img[spec.tiles.coin];
-    this.tBackground = img[spec.tiles.background];
+    // Create a container for the level buttons
+    this.levelButtonsContainer = createDiv('');
+    this.levelButtonsContainer.style('display', 'flex');
+    this.levelButtonsContainer.style('justify-content', 'center');
+    this.levelButtonsContainer.style('align-items', 'center');
+    this.levelButtonsContainer.style('width', '100%');
+    this.levelButtonsContainer.style('position', 'absolute');
+    this.levelButtonsContainer.style('top', '50%');
+    this.levelButtonsContainer.style('transform', 'translateY(-50%)');
+    this.levelButtonsContainer.style('gap', '20px'); // Add some spacing between buttons
+ this.levelButtonsContainer.id('level-select-container'); // Add an ID for easy removal
 
     const keys = Object.keys(MAPS);
-    const pad = 120;
-    this.buttons = keys.map((k, i) => ({
-      key: k,
-      x: width / 2 - ((keys.length - 1) * pad) / 2 + i * pad,
-      y: height * 0.55,
-      w: 100,
-      h: 100
-    }));
-    this.hover = null;
+    this.buttons = keys.map(key => {
+      const spec = MAPS[key];
+      const buttonDiv = createDiv('');
+      buttonDiv.parent(this.levelButtonsContainer);
+      buttonDiv.style('text-align', 'center');
+      buttonDiv.style('cursor', 'pointer');
+      buttonDiv.style('padding', '10px');
+      buttonDiv.style('border-radius', '10px');
+      buttonDiv.style('background', 'rgba(0, 0, 0, 0.5)');
+      buttonDiv.style('color', '#fff');
+      buttonDiv.style('font-size', '20px');
+      buttonDiv.style('border', '2px solid transparent');
+      buttonDiv.mouseOver(() => this.hover = key);
+      buttonDiv.mouseOut(() => this.hover = null);
+      buttonDiv.mousePressed(() => this.sm.change('play', { char: this.char, level: key }));
+
+      const imgElement = createImg(spec.mapImg, key);
+      imgElement.style('width', '60px'); // Make images even smaller
+      imgElement.style('height', '60px'); // Keep aspect ratio square-ish
+      imgElement.parent(buttonDiv);
+
+      createP(key).parent(buttonDiv);
+      return { key: key, element: buttonDiv };
+    });
+
+    this.tPlatform   = img[spec.tiles.platform];
+    this.tLava = img[spec.tiles.lava];
+    this.tCoin       = img[spec.tiles.coin];
+    this.tBackground = img[spec.tiles.background];
   }
   update() {
-    if (this.buttons.length > 0) {
-      this.hover = this.buttons.find(b =>
-        mouseX > b.x &&
-        mouseX < b.x + b.w &&
-        mouseY > b.y &&
-        mouseY < b.y + b.h
-      ) || null;
-      cursor(this.hover ? 'pointer' : 'default');
-    }
+    // Update button styles based on hover
+    this.buttons.forEach(button => {
+      if (this.hover === button.key) {
+        button.element.style('border', '2px solid #ff66cc');
+      } else {
+        button.element.style('border', '2px solid transparent');
+      }
+    });
+  }
+
+  exit() {
+    // Remove the level selection container when exiting the scene
+    const container = document.getElementById('level-select-container');
+    if (container) container.remove();
   }
   draw() {
     image(img.selectionBackground, 0, 0, width, height);
     fill(255);
     textSize(34);
     text('Select Level', width / 2, height * 0.35);
-    this.buttons.forEach(b => {
-      stroke(this.hover === b ? '#ff66cc' : 255);
-      fill(0, 150);
-      rect(b.x, b.y, b.w, b.h, 12);
-      noStroke();
-      fill(255);
-      textSize(20);
-      text(b.key, b.x + b.w / 2, b.y + b.h / 2);
-    });
+    // The buttons are now DOM elements, they draw themselves
   }
   mousePressed() {
     if (this.hover) {
@@ -849,6 +856,10 @@ class Over {
   }
   draw() {
     background(0);
+    stroke(0); // Black stroke
+    strokeWeight(2); // Make stroke a little thinner
+    fill(0);
+
     image(img.lose, 0, 0, width, height);
     fill(255, 0, 0);
     textSize(48);
@@ -883,12 +894,14 @@ class Win {
   draw() {
     background(135, 206, 250);
     image(img.winbackground, 0, 0, width, height);
+    stroke(255); // White stroke
+    strokeWeight(3);
     fill(0);
     textSize(48);
     text("YOU WIN!", width / 2, height * 0.4);
     textSize(24);
     text(`Coins: ${this.c}/${totalCoins}`, width / 2, height * 0.5);
-    text("Press R to replay", width / 2, height * 0.56);
+    text("Press R to replay", width / 2, height * 0.56); // This line was duplicated, keeping only one
     text("ESC = Main Menu", width / 2, height * 0.62);
   }
   keyPressed(k) {
